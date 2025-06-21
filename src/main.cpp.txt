@@ -1,0 +1,32 @@
+#include <Adafruit_NeoPixel.h>
+
+#define LED_PIN     4       // D4 on ESP32 = GPIO 4
+#define LED_COUNT   3       // Number of LEDs in the strand
+
+Adafruit_NeoPixel strip(LED_COUNT, LED_PIN, NEO_GRB + NEO_KHZ800);
+
+void setup() {
+  strip.begin();           // Initialize the NeoPixel library
+  strip.show();            // Turn off all pixels initially
+  strip.setBrightness(50); // Optional: Lower brightness (0–255)
+}
+void colorWipe(uint32_t color, int wait);
+void loop() {
+  // Cycle through Red, Green, Blue
+  colorWipe(strip.Color(255, 0, 0), 500); // Red
+  colorWipe(strip.Color(0, 255, 0), 500); // Green
+  colorWipe(strip.Color(0, 0, 255), 500); // Blue
+  colorWipe(strip.Color(255, 255, 0), 500); // Yellow
+  colorWipe(strip.Color(0, 255, 255), 500); // Cyan
+  colorWipe(strip.Color(255, 0, 255), 500); // Magenta
+  colorWipe(strip.Color(0, 0, 0), 500); // OFF
+}
+
+// Wipe color across all pixels
+void colorWipe(uint32_t color, int wait) {
+  for (int i = 0; i < strip.numPixels(); i++) {
+    strip.setPixelColor(i, color);
+    strip.show();
+    delay(wait);
+  }
+}
