@@ -7,8 +7,7 @@
 #include "status_indicator.h"
 #include "BioAuthAWS_API.h"
 
-// Example: U8G2_SSD1306_128X64_NONAME_F_HW_I2C(rotation, [reset [, clock, data]])
-// For most ESP32/ESP8266 boards, you can use U8G2_R0, U8X8_PIN_NONE for reset
+
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
@@ -20,7 +19,7 @@ void setup() {
   setupFingerprintSensor();
   connectToWiFiWithUI();   // Updated function with retry & animation
   setupIndicator();
-  setupAWS();
+  connectAWS();
 
   if (wifiConnected) {
     drawWiFiConnected(u8g2);
@@ -37,11 +36,11 @@ void setup() {
 
 
 void loop() {
-  GetStatus_AWS(); // Check AWS connection status
-  handleSerialCommand();
+  AWS_Loop();
   drawHomeScreen(u8g2);
   if (WiFi.status() != WL_CONNECTED && !wifiConnected) {
     connectToWiFiWithUI();
   }
+  delay(3000);
 }
 
