@@ -16,6 +16,9 @@ Adafruit_Fingerprint finger = Adafruit_Fingerprint(&fingerSerial);
 
 uint8_t fingerID = 1;
 
+
+
+
 void setupFingerprintSensor() {
   fingerSerial.begin(56900, SERIAL_8N1, FINGER_RX, FINGER_TX);
   finger.begin(56900);
@@ -27,87 +30,77 @@ void setupFingerprintSensor() {
   }
 }
 
-bool enrollFingerprint() {
-  indicateProcessing(); // Indicate processing with LED
-  u8g2.clearBuffer();
-  drawCenteredText(u8g2, "Place finger", 20); u8g2.sendBuffer();
-
-  Serial.println("Waiting for finger...");
-
-
-  // Wait for finger to be placed
-  while (p != FINGERPRINT_OK) {
-    p = finger.getImage();
-    if (p == FINGERPRINT_NOFINGER) {
-      delay(100);
-      continue;
-    } else if (p != FINGERPRINT_OK) {
-      Serial.print("Error getting image: "); Serial.println(p);
-      return false;
+int findNextAvailableID() {
+  for (int id = 1; id <= 127; id++) {
+    if (finger.loadModel(id) != FINGERPRINT_OK) {
+      return id; // Slot is free
     }
   }
+  return -1; // Sensor full
+}
 
-  Serial.println("Image taken");
-  indicateTempSuccess(); // Indicate temporary success with LED
-
-  p = finger.image2Tz(1);
-  if (p != FINGERPRINT_OK) {
-    Serial.print("Image to template 1 failed: "); Serial.println(p);
-    return false;
+int enrollFingerprint() {
+  indicateProcessing();
+  int fid = findNextAvailableID();
+  if (fid == -1) {
+    Serial.println("Fingerprint sensor memory is full!");
+    return -1;
   }
 
   u8g2.clearBuffer();
-  drawCenteredText(u8g2, "Remove finger", 20); u8g2.sendBuffer();
-  indicateProcessing(); // Indicate processing with LED
-  delay(2000);
+  drawCenteredText(u8g2, "Place finger", 20);
+  u8g2.sendBuffer();
 
-  // Wait for finger to be removed
-  while (finger.getImage() != FINGERPRINT_NOFINGER) {
-    delay(100);
-  }
+  while (finger.getImage() != FINGERPRINT_OK);
+
   u8g2.clearBuffer();
-  drawCenteredText(u8g2, "Place same finger", 20); u8g2.sendBuffer();
+  drawCenteredText(u8g2, "Processing...", 20);
+  u8g2.sendBuffer();
 
-  // Wait for same finger again
-  while ((p = finger.getImage()) != FINGERPRINT_OK) {
-    delay(100);
+  if (finger.image2Tz(1) != FINGERPRINT_OK) {
+    Serial.println("Image conversion failed");
+    indicateFailure(); // Indicate failure with buzzer/LED
+    return -1;
+  }
+  delay(500);
+  u8g2.clearBuffer();
+  drawCenteredText(u8g2, "Remove finger", 20);
+  indicateTempSuccess(); // Indicate temporary success with buzzer/LED
+  u8g2.sendBuffer();
+
+  while (finger.getImage() != FINGERPRINT_NOFINGER);
+  delay(1000);
+  u8g2.clearBuffer();
+  drawCenteredText(u8g2, "Place same finger again", 20);
+  u8g2.sendBuffer();
+
+  while (finger.getImage() != FINGERPRINT_OK);
+
+  if (finger.image2Tz(2) != FINGERPRINT_OK) {
+    Serial.println("Second image conversion failed");
+    return -1;
   }
 
-  Serial.println("Second image taken");
-  indicateTempSuccess(); // Indicate temporary success with LED
-
-  p = finger.image2Tz(2);
-  if (p != FINGERPRINT_OK) {
-    Serial.print("Image to template 2 failed: "); Serial.println(p);
-    return false;
+  if (finger.createModel() != FINGERPRINT_OK) {
+    Serial.println("Model creation failed");
+    indicateFailure(); // Indicate failure with buzzer/LED
+    return -1;
   }
 
-  p = finger.createModel();
-  if (p != FINGERPRINT_OK) {
-    Serial.print("Create model failed: "); Serial.println(p);
-    return false;
-  }
-
-  p = finger.storeModel(fingerID);
-  if (p == FINGERPRINT_OK) {
-    Serial.print("ENROLLED_ID: "); Serial.println(fingerID);
-    fingerID++;
+  if (finger.storeModel(fid) == FINGERPRINT_OK) {
+    Serial.print("Stored fingerprint at ID: ");
+    Serial.println(fid);
     indicateSuccess(); // Indicate success with buzzer/LED
     drawEnrollmentSuccess(u8g2);
     delay(4000);
-    return true;
+    return fid;
+  } else {
+    Serial.println("Fingerprint storage failed");
+    return -1;
   }
-
-  Serial.print("Store failed: "); Serial.println(p);
-  indicateFailure(); // Indicate failure with buzzer/LED
-  // u8g2.clearBuffer();
-  // drawAccessDenied(u8g2);
-  // u8g2.sendBuffer();
-
-  return false;
 }
 
-bool authenticateFingerprint() {
+int authenticateFingerprint() {
   u8g2.clearBuffer();
   drawCenteredText(u8g2, "Place Finger", 20); 
   u8g2.sendBuffer();
@@ -143,13 +136,8 @@ bool authenticateFingerprint() {
      u8g2.sendBuffer();
     drawAuthSuccess(u8g2);
     delay(4000);
-    
-
-    // delay(1000);
-    // u8g2.clearBuffer();
-    // drawAccessGranted(u8g2);
-    // u8g2.sendBuffer();
-     return true;
+    p = finger.fingerID; // Return the matched ID
+    return p;
   }
 
   Serial.println("Fingerprint not recognized");

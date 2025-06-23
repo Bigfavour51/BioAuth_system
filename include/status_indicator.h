@@ -23,11 +23,17 @@ void clearIndicator();
 void setupIndicator() {
   pinMode(BUZZER_PIN, OUTPUT);
   digitalWrite(BUZZER_PIN, LOW);
+
+  // Fix: Initialize LEDC channel for tone()
+  ledcSetup(0, 5000, 8);              // Channel 0, 5 kHz, 8-bit resolution
+  ledcAttachPin(BUZZER_PIN, 0);       // Attach channel 0 to the buzzer pin
+
   pixel.begin();
   pixel.setBrightness(255); // Max brightness
   pixel.clear();
   pixel.show();
 }
+
 
 void setAllPixels(uint32_t color) {
   for (int i = 0; i < NUM_PIXELS; i++) {

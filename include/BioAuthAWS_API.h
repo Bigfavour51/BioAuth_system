@@ -168,10 +168,11 @@ PubSubClient client(net);
 
 unsigned long previousPublishMillis = 0;
 const long publishInterval = 5000;
-
 void publishMessage(int fid);
-
 bool awsConfigStatus = false;
+
+volatile bool enrollRequested = false;
+volatile bool authRequested = false;
 
 // --------- NTP Time Setup (needed for AWS cert handshake) ----------
 void setupNTP() {
@@ -185,6 +186,7 @@ void setupNTP() {
 }
 
 // --------- AWS Message Handler ----------
+
 void messageHandler(char* topic, byte* payload, unsigned int length) {
   String message;
   for (unsigned int i = 0; i < length; i++) {
@@ -198,23 +200,18 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
 
   StaticJsonDocument<128> doc;
   DeserializationError error = deserializeJson(doc, message);
-
   if (error) {
     Serial.println("JSON parse failed");
     return;
   }
 
-  const char* command = doc["command"];
+  const char* command = doc["message"];
   if (strcmp(command, "ENROLL") == 0) {
-    Serial.println("ENROLL command recognized");
-    int fid = enrollFingerprint();  // Should return the enrolled ID
-    publishMessage(fid);
+    enrollRequested = true;
   } else if (strcmp(command, "AUTH") == 0) {
-    Serial.println("AUTH command recognized");
-    int fid = authenticateFingerprint();  // Should return matched ID or -1
-    publishMessage(fid);
+    authRequested = true;
   } else {
-    Serial.println("Invalid message received");
+    Serial.println("Invalid command");
   }
 }
 

@@ -11,6 +11,7 @@
 
 U8G2_SH1106_128X64_NONAME_F_HW_I2C u8g2(U8G2_R0, /* reset=*/ U8X8_PIN_NONE);
 
+
 void setup() {
   Serial.begin(115200);
   u8g2.begin();
@@ -36,11 +37,30 @@ void setup() {
 
 
 void loop() {
-  AWS_Loop();
+
+  AWS_Loop();  // Keeps MQTT alive
+
+  if (enrollRequested) {
+    enrollRequested = false;
+    int fid = enrollFingerprint();
+    publishMessage(fid);
+  }
+
+  if (authRequested) {
+    authRequested = false;
+    int fid = authenticateFingerprint();
+    publishMessage(fid);
+  }
+
   drawHomeScreen(u8g2);
+
   if (WiFi.status() != WL_CONNECTED && !wifiConnected) {
     connectToWiFiWithUI();
   }
+
   delay(3000);
 }
+
+
+
 
