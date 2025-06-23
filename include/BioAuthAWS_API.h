@@ -159,22 +159,27 @@
 #include "wifi_handler.h"
 #include <pgmspace.h>
 
-/* Configuration For AWS Thing using generated topics, certificates and keys */
-#define AWS_PUBLISH_TOPIC "bimotericAuth/pub"
-#define AWS_SUBSCRIBE_TOPIC "bimotericAuth/sub"
+
+#define AWS_PUBLISH_TOPIC "bimotericAuth/sub"
+#define AWS_SUBSCRIBE_TOPIC "bimotericAuth/pub"
+#define AWS_PUBSTATUS_TOPIC "bimotericAuth/login/pub"
+#define AWS_SUBSTATUS_TOPIC "bimotericAuth/login/sub"
 
 WiFiClientSecure net;
 PubSubClient client(net);
 
 unsigned long previousPublishMillis = 0;
 const long publishInterval = 5000;
-void publishMessage(int fid);
+void publishAuthMessage(int fid);
+void connectAWS();
 bool awsConfigStatus = false;
 
 volatile bool enrollRequested = false;
 volatile bool authRequested = false;
+char incomingUserId[40];  // Make room for a 36-char UUID + null terminator
 
-// --------- NTP Time Setup (needed for AWS cert handshake) ----------
+
+
 void setupNTP() {
   Serial.print("Setting time using SNTP...");
   configTime(TIME_ZONE * 3600, 0, "pool.ntp.org", "time.nist.gov");
@@ -184,8 +189,6 @@ void setupNTP() {
   }
   Serial.println(" done!");
 }
-
-// --------- AWS Message Handler ----------
 
 void messageHandler(char* topic, byte* payload, unsigned int length) {
   String message;
@@ -198,39 +201,154 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(message);
 
-  StaticJsonDocument<128> doc;
+  StaticJsonDocument<256> doc;
   DeserializationError error = deserializeJson(doc, message);
   if (error) {
     Serial.println("JSON parse failed");
     return;
   }
 
-  const char* command = doc["message"];
-  if (strcmp(command, "ENROLL") == 0) {
-    enrollRequested = true;
-  } else if (strcmp(command, "AUTH") == 0) {
-    authRequested = true;
+  // 🧠 Distinguish by topic
+  if (strcmp(topic, "bimotericAuth/pub") == 0) {
+    if (doc.containsKey("command")) {
+      const char* command = doc["command"];
+
+      if (strcmp(command, "ENROLL") == 0) {
+        enrollRequested = true;
+
+        if (doc.containsKey("userId")) {
+          strncpy(incomingUserId, doc["userId"], sizeof(incomingUserId));
+          incomingUserId[sizeof(incomingUserId) - 1] = '\0';
+          Serial.print("Enrollment requested for user ID: ");
+          Serial.println(incomingUserId);
+        }
+      }
+
+      else if (strcmp(command, "AUTH") == 0) {
+        authRequested = true;
+        Serial.println("AUTH command manually triggered.");
+      }
+
+      else {
+        Serial.println("Unknown command received.");
+      }
+    }
+  }
+
+  else if (strcmp(topic, "bimotericAuth/login/sub") == 0) {
+  if (doc.containsKey("authenticate")) {
+    bool isAuth = doc["authenticate"];
+    const char* userId = doc["userId"] | "Unknown";
+    const char* name = doc["name"] | "Unknown";
+    const char* email = doc["email"] | "Unknown";
+
+    Serial.println("Authentication response received:");
+    Serial.print("User ID: "); Serial.println(userId);
+    Serial.print("Name: "); Serial.println(name);
+    Serial.print("Email: "); Serial.println(email);
+    Serial.print("Auth status: "); Serial.println(isAuth ? "GRANTED" : "DENIED");
+
+        if (isAuth) {
+        indicateSuccess();
+
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_ncenB08_tr); // Nice readable font
+        u8g2.drawStr(0, 12, "Access Granted!");
+
+        u8g2.setCursor(0, 28);
+        u8g2.print("Name: ");
+        u8g2.print(name);
+
+        u8g2.setCursor(0, 44);
+        u8g2.print("Email: ");
+        u8g2.print(email);
+
+        u8g2.sendBuffer();
+        delay(4000);
+      } else {
+        indicateFailure();
+
+        u8g2.clearBuffer();
+        u8g2.setFont(u8g2_font_ncenB08_tr);
+        u8g2.drawStr(0, 12, "Access Denied!");
+
+        u8g2.setCursor(0, 28);
+        u8g2.print("Name: ");
+        u8g2.print(name);
+
+        u8g2.setCursor(0, 44);
+        u8g2.print("Email: ");
+        u8g2.print(email);
+
+        u8g2.sendBuffer();
+        delay(4000);
+      }
+
   } else {
-    Serial.println("Invalid command");
+    Serial.println("Invalid AUTH payload from web.");
   }
 }
 
-// --------- Publish Fingerprint ID to AWS ----------
-void publishMessage(int fid) {
-  StaticJsonDocument<200> doc;
-  doc["fingerid"] = fid;
+
+  else {
+    Serial.println("Unrecognized topic.");
+  }
+}
+
+void publishMessage(int fid, const char* userId) {
+  StaticJsonDocument<256> doc;
+  doc["event"] = "ENROLL_COMPLETE";
+  doc["fingerprint"] = fid;
+  doc["userId"] = userId;
 
   char jsonBuffer[256];
   serializeJson(doc, jsonBuffer);
 
-  if (client.publish(AWS_PUBLISH_TOPIC, jsonBuffer)) {
-    Serial.println("Published to AWS IoT.");
+  // 🚨 Ensure client is connected
+  if (!client.connected()) {
+    Serial.println("MQTT not connected. Attempting to reconnect...");
+    connectAWS();  // Call your reconnect logic
+    delay(500);    // Give time to connect
+  }
+
+  if (client.connected()) {
+    if (client.publish(AWS_PUBLISH_TOPIC, jsonBuffer)) {
+      Serial.println("Published enrollment result to AWS IoT:");
+      Serial.println(jsonBuffer);
+    } else {
+      Serial.println("Failed to publish to AWS IoT.");
+    }
   } else {
-    Serial.println("Failed to publish to AWS IoT.");
+    Serial.println("Still not connected. Publish aborted.");
   }
 }
 
-// --------- AWS Connection ----------
+void publishAuthMessage(int fid) {
+  StaticJsonDocument<128> doc;
+  doc["fingerprint"] = fid;
+
+  char jsonBuffer[128];
+  serializeJson(doc, jsonBuffer);
+
+  // 🚨 Check if MQTT client is connected
+  if (!client.connected()) {
+    Serial.println("MQTT not connected. Attempting to reconnect...");
+    connectAWS();  // Use your AWS reconnect function
+    delay(500);
+  }
+
+  if (client.connected()) {
+    if (client.publish(AWS_PUBSTATUS_TOPIC, jsonBuffer)) {
+      Serial.println("Published AUTH to AWS IoT:");
+      Serial.println(jsonBuffer);
+    } else {
+      Serial.println("Failed to publish AUTH to AWS IoT.");
+    }
+  } else {
+    Serial.println("Still not connected. Publish aborted.");
+  }
+}
+
 void connectAWS() {
   setupNTP();
 
@@ -251,11 +369,12 @@ void connectAWS() {
     }
   }
 
-  client.subscribe(AWS_SUBSCRIBE_TOPIC);
-  Serial.println("Subscribed to AWS topic.");
+ client.subscribe("bimotericAuth/pub");        // For incoming commands
+ client.subscribe("bimotericAuth/login/sub");  // For AUTH result status
+ Serial.println("Subscribed to AWS topics.");
+
 }
 
-// --------- AWS Loop ----------
 void AWS_Loop() {
   if (!client.connected()) {
     awsConfigStatus = false;
