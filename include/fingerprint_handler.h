@@ -28,8 +28,9 @@ void setupFingerprintSensor() {
   } else {
     Serial.println("Fingerprint sensor NOT found");
   }
+  // Optionally clear the fingerprint database on setup
+  // finger.emptyDatabase();
 }
-
 int findNextAvailableID() {
   for (int id = 1; id <= 127; id++) {
     if (finger.loadModel(id) != FINGERPRINT_OK) {

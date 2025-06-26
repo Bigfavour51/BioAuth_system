@@ -6,8 +6,8 @@
 #include "display_ref.h"
 #include "status_indicator.h"
 
-const char* ssid = "smarttracker";
-const char* password = "12345678";
+const char* ssid = "Skill G Innovation";
+const char* password = "INNOV8HUB";
 
 bool wifiConnected = false;
 

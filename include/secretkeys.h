@@ -14,7 +14,7 @@
 #define SECRET2
  
 // const char WIFI_SSID[] = "myhotspot";               //TAMIM2.4G
-// const char WIFI_PASSWORD[] = "pcpass1111";           //0544287380
+// const char WIFI_PASSWORD[] = "pcpass1111";           //0544287380z
  
 #define THINGNAME "bimotericAuth" 
 

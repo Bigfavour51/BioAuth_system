@@ -35,30 +35,37 @@ void setup() {
   delay(2000);
 }
 
-
+ 
 void loop() {
 
   AWS_Loop();  // Keeps MQTT alive
 
+ if (enrollRequested) {
+    enrollRequested = false;
+    int fid = enrollFingerprint();
+    publishMessage(fid, incomingUserId);
+  }
+  if (authRequested) {
+    authRequested = false;
+    int fid = authenticateFingerprint();
+    publishAuthMessage(fid, incomingUserId);
+  }
+
 
   if (finger.getImage() == FINGERPRINT_OK) {
     if (finger.image2Tz() == FINGERPRINT_OK &&
-        finger.createModel() == FINGERPRINT_OK  &&
       finger.fingerSearch() == FINGERPRINT_OK) {
 
       int fid = finger.fingerID;
       Serial.print("Finger mapped,fingerprint ID: ");
       Serial.println(fid);
-      publishAuthMessage(fid);  // Send to AWS IoT
+      publishAuthMessage(fid, "local"); // Send to AWS IoT
       indicateSuccess();
       u8g2.clearBuffer();
       drawCenteredText(u8g2, "match found", 20);
       u8g2.sendBuffer();
-      delay(2000);
-      u8g2.clearBuffer();
-      drawCenteredText(u8g2, "Sent to Web", 20);
-      u8g2.sendBuffer();
-      delay(2000);
+      delay(1000);
+      
     }
      else{
       indicateFailure();
@@ -70,17 +77,6 @@ void loop() {
 
   }
  
-  if (enrollRequested) {
-    enrollRequested = false;
-    int fid = enrollFingerprint();
-    publishMessage(fid, incomingUserId);
-  }
-  if (authRequested) {
-    authRequested = false;
-    int fid = authenticateFingerprint();
-    publishMessage(fid, incomingUserId);
-  }
-
   drawHomeScreen(u8g2);
 
   if (WiFi.status() != WL_CONNECTED && !wifiConnected) {

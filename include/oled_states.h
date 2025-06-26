@@ -12,7 +12,7 @@ void drawCenteredText(U8G2 &u8g2, const char* text, uint8_t y) {
 void drawWiFiStarting(U8G2 &u8g2) {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_helvB08_tr);
-  drawCenteredText(u8g2, "Wi-Fi Starting...", 20);
+  drawCenteredText(u8g2, "Searching Network...", 20);
   u8g2.drawRFrame(20, 35, 88, 10, 3); // Rounded frame
   u8g2.drawBox(20, 35, (millis() / 100) % 89, 10);
   u8g2.sendBuffer();
@@ -21,7 +21,7 @@ void drawWiFiStarting(U8G2 &u8g2) {
 void drawWiFiConnected(U8G2 &u8g2) {
   u8g2.clearBuffer();
   u8g2.setFont(u8g2_font_helvB08_tr);
-  drawCenteredText(u8g2, "Wi-Fi Connected!", 20);
+  drawCenteredText(u8g2, "AWS Connected !", 20);
 
   // Wi-Fi symbol
   uint8_t cx = 64, cy = 48;

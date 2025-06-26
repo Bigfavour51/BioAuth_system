@@ -201,7 +201,7 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
   Serial.print("]: ");
   Serial.println(message);
 
-  StaticJsonDocument<256> doc;
+  StaticJsonDocument<512> doc;
   DeserializationError error = deserializeJson(doc, message);
   if (error) {
     Serial.println("JSON parse failed");
@@ -235,7 +235,7 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
     }
   }
 
-  else if (strcmp(topic, "bimotericAuth/login/sub") == 0) {
+  else if (strcmp(topic, "bimotericAuth/login/pub") == 0) {
   if (doc.containsKey("authenticate")) {
     bool isAuth = doc["authenticate"];
     const char* userId = doc["userId"] | "Unknown";
@@ -249,6 +249,7 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
     Serial.print("Auth status: "); Serial.println(isAuth ? "GRANTED" : "DENIED");
 
         if (isAuth) {
+          
         indicateSuccess();
 
         u8g2.clearBuffer();
@@ -297,7 +298,7 @@ void messageHandler(char* topic, byte* payload, unsigned int length) {
 
 void publishMessage(int fid, const char* userId) {
   StaticJsonDocument<256> doc;
-  doc["event"] = "ENROLL_COMPLETE";
+  doc["event"] = "ENROLL_COMPLETED";
   doc["fingerprint"] = fid;
   doc["userId"] = userId;
 
@@ -323,31 +324,34 @@ void publishMessage(int fid, const char* userId) {
   }
 }
 
-void publishAuthMessage(int fid) {
-  StaticJsonDocument<128> doc;
+void publishAuthMessage(int fid, const char* userId) {
+  StaticJsonDocument<256> doc;
+  doc["event"] = "AUTH_COMPLETED";
   doc["fingerprint"] = fid;
+  doc["userId"] = userId;
 
-  char jsonBuffer[128];
+  char jsonBuffer[256];
   serializeJson(doc, jsonBuffer);
 
-  // 🚨 Check if MQTT client is connected
+  // 🚨 Ensure client is connected
   if (!client.connected()) {
     Serial.println("MQTT not connected. Attempting to reconnect...");
-    connectAWS();  // Use your AWS reconnect function
-    delay(500);
+    connectAWS();  // Call your reconnect logic
+    delay(500);    // Give time to connect
   }
 
   if (client.connected()) {
-    if (client.publish(AWS_PUBSTATUS_TOPIC, jsonBuffer)) {
-      Serial.println("Published AUTH to AWS IoT:");
+    if (client.publish(AWS_SUBSTATUS_TOPIC, jsonBuffer)) {
+      Serial.println("Published enrollment result to AWS IoT:");
       Serial.println(jsonBuffer);
     } else {
-      Serial.println("Failed to publish AUTH to AWS IoT.");
+      Serial.println("Failed to publish to AWS IoT.");
     }
   } else {
     Serial.println("Still not connected. Publish aborted.");
   }
 }
+
 
 void connectAWS() {
   setupNTP();
@@ -370,7 +374,7 @@ void connectAWS() {
   }
 
  client.subscribe("bimotericAuth/pub");        // For incoming commands
- client.subscribe("bimotericAuth/login/sub");  // For AUTH result status
+ client.subscribe("bimotericAuth/login/pub");  // For AUTH result status
  Serial.println("Subscribed to AWS topics.");
 
 }
